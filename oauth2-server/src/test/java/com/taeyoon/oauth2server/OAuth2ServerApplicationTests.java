@@ -1,4 +1,4 @@
-package com.taeyoon.authorizationserver;
+package com.taeyoon.oauth2server;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -20,7 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-class AuthorizationServerApplicationTests {
+class OAuth2ServerApplicationTests {
 
 	private static final String TOKEN_URL = "/oauth2/v1/token";
 	private static final String INTROSPECT_URL = "/oauth2/v1/introspect";

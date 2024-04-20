@@ -1,11 +1,11 @@
-create schema `spring-authorization-server-sample`;
+create schema `test`;
 
 -- 'use' `spring-authorization-server-sample`;
 
 create table `oauth2_registered_client`
 (
     id                            varchar(100)                        not null
-        primary key,
+    primary key,
     client_id                     varchar(100)                        not null,
     client_id_issued_at           timestamp default CURRENT_TIMESTAMP not null,
     client_secret                 varchar(200)                        null,

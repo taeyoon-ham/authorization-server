@@ -1,4 +1,4 @@
-package com.taeyoon.authorizationserver.config;/*
+package com.taeyoon.oauth2server.infra.config;/*
  * Copyright 2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,34 +27,21 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Role;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.oauth2.core.AuthorizationGrantType;
-import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
-import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
-import org.springframework.security.oauth2.server.authorization.client.InMemoryRegisteredClientRepository;
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
-import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
-import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
-import org.springframework.security.oauth2.server.authorization.token.DelegatingOAuth2TokenGenerator;
-import org.springframework.security.oauth2.server.authorization.token.JwtGenerator;
-import org.springframework.security.oauth2.server.authorization.token.OAuth2AccessTokenGenerator;
-import org.springframework.security.oauth2.server.authorization.token.OAuth2RefreshTokenGenerator;
-import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
@@ -66,15 +53,22 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.taeyoon.oauth2server.infra.config.handler.CustomAccessDeniedHandler;
+import com.taeyoon.oauth2server.infra.config.handler.CustomFormLoginFailureHandler;
+
+import lombok.RequiredArgsConstructor;
 
 /**
  * OAuth Authorization Server Configuration.
  *
  * @author Steve Riesenberg
  */
+@RequiredArgsConstructor
 @Configuration
 @EnableWebSecurity(debug = true)
-public class OAuth2AutServerSecurityConfig {
+public class SecurityConfig {
+
+	private final CustomFormLoginFailureHandler customFormLoginFailureHandler;
 
 	/**
 	 * 인증서버를 위한 기본 구성
@@ -84,7 +78,7 @@ public class OAuth2AutServerSecurityConfig {
 	public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
 		OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
 		http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
-			// .registeredClientRepository(registeredClientRepository) // 신규 및 기존 클라이언트를 관리하기 위한 RegisteredClientRepository( 필수 )입니다.
+			// .registeredClientRepository(jdbcRegisteredClientRepository) // 신규 및 기존 클라이언트를 관리하기 위한 RegisteredClientRepository( 필수 )입니다.
 			// .authorizationServerSettings(authorizationServerSettings) // OAuth2 인증 서버에 대한 구성 설정을 사용자 정의하기 위한 AuthorizationServerSettings( 필수 )입니다.
 			// .tokenGenerator(tokenGenerator) // OAuth2TokenGeneratorOAuth2 인증 서버에서 지원하는 토큰을 생성하기 위한 것입니다. code, access_token, refresh_token, id_token
 			// .clientAuthentication(clientAuthentication -> { }) // OAuth2 클라이언트 인증을 위한 구성자입니다 . client_id, client_secret 을 추출하고 인증하는 역할. PasswordEncoder => BCryptPasswordEncoder
@@ -102,57 +96,76 @@ public class OAuth2AutServerSecurityConfig {
 				// .logoutEndpoint(logoutEndpoint -> { }) // OpenID Connect 1.0 로그아웃 엔드포인트 의 구성자입니다 .
 				// .userInfoEndpoint(userInfoEndpoint -> { }) // OpenID Connect 1.0 UserInfo 엔드포인트 의 구성자입니다 .
 				// .clientRegistrationEndpoint(clientRegistrationEndpoint -> { }) // OpenID Connect 1.0 클라이언트 등록 엔드포인트 의 구성자입니다 .
-			.oidc(Customizer.withDefaults());
+			.oidc(Customizer.withDefaults())
+		;
 		http
-			// .exceptionHandling((exceptions) -> exceptions
-			// 	.authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/login"))
-			// )
+			.csrf(AbstractHttpConfigurer::disable)
+			.formLogin(AbstractHttpConfigurer::disable)
 			.exceptionHandling((exceptions) -> exceptions
 				.defaultAuthenticationEntryPointFor(
 					new LoginUrlAuthenticationEntryPoint("/login"),
 					new MediaTypeRequestMatcher(MediaType.TEXT_HTML)
 				)
+				.accessDeniedHandler(new CustomAccessDeniedHandler())
+			);
+
+		return http.build();
+	}
+
+
+	// Resource Server 를 위한 셋팅
+	@Bean
+	@Order(1)
+	public SecurityFilterChain resourceSecurityFilterChain(HttpSecurity http) throws Exception {
+		// @formatter:off
+		http
+			.authorizeHttpRequests((authorize) -> authorize
+				.requestMatchers(HttpMethod.GET, "/connect/**").permitAll()
+				.requestMatchers(HttpMethod.POST, "/connect/**").permitAll()
+				.requestMatchers("/**").permitAll()
+				.anyRequest().authenticated()
 			)
 			// Accept access tokens for User Info and/or Client Registration
 			.oauth2ResourceServer((resourceServer) -> resourceServer
-				.jwt(Customizer.withDefaults()));
+				.jwt(Customizer.withDefaults())
+			)
+			.headers(headers -> headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::disable))
+			.formLogin(formLogin -> formLogin.failureHandler(customFormLoginFailureHandler));
+		// @formatter:on
 
 		return http.build();
 	}
 
 	// Resource Owner 인증을 위한 로그인 페이지 설정
-	@Bean
-	@Order(2)
-	public SecurityFilterChain standardSecurityFilterChain(HttpSecurity http) throws Exception {
-		// @formatter:off
-		http
-			.authorizeHttpRequests(authorizeRequests ->
-				authorizeRequests
-					.requestMatchers(
-						AntPathRequestMatcher.antMatcher("/h2-console/**")
-					).permitAll()
-					.requestMatchers(
-						AntPathRequestMatcher.antMatcher("/**")
-					).authenticated()
-			)
-			.headers(headers -> headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::disable))
-			.csrf(csrf -> csrf.ignoringRequestMatchers(("/h2-console/**")))
-			.formLogin(Customizer.withDefaults());
-		// @formatter:on
-
-		return http.build();
-	}
+	// @Bean
+	// @Order(2)
+	// public SecurityFilterChain standardSecurityFilterChain(HttpSecurity http) throws Exception {
+	// 	http
+	// 		.authorizeHttpRequests(authorizeRequests ->
+	// 			authorizeRequests
+	// 				.requestMatchers(
+	// 					AntPathRequestMatcher.antMatcher("/h2-console/**")
+	// 				).permitAll()
+	// 				.requestMatchers(
+	// 					AntPathRequestMatcher.antMatcher("/**")
+	// 				).authenticated()
+	// 		)
+	// 		.headers(headers -> headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::disable))
+	// 		.csrf(csrf -> csrf.ignoringRequestMatchers(("/h2-console/**")))
+	// 		.formLogin(Customizer.withDefaults());
+	//
+	// 	return http.build();
+	// }
 
 	@Bean
 	public WebSecurityCustomizer webSecurityCustomizer() {
 		// 정적 리소스 spring security 대상에서 제외
 		return (web) -> web
 			.ignoring()
+			.requestMatchers("/webjars/**")
+			.requestMatchers("/assets/**")
 			.requestMatchers(
 				AntPathRequestMatcher.antMatcher("/chrome.css.map")
-			)
-			.requestMatchers(
-				AntPathRequestMatcher.antMatcher("/h2-console")
 			)
 			.requestMatchers(
 				PathRequest.toStaticResources().atCommonLocations()
@@ -188,22 +201,22 @@ public class OAuth2AutServerSecurityConfig {
 
 	// AuthorizationServerSettingsOAuth2 인증 서버에 대한 구성 설정이 포함되어 있습니다.
 	// 이는 URI프로토콜 끝점과 발급자 식별자를 지정합니다 . URI프로토콜 끝점의 기본값 은 다음과 같습니다.
-	@Bean
-	public AuthorizationServerSettings authorizationServerSettings() {
-		return AuthorizationServerSettings.builder()
-			.issuer("http://localhost:9000")
-			.authorizationEndpoint("/oauth2/v1/authorize")
-			.deviceAuthorizationEndpoint("/oauth2/v1/device_authorization")
-			.deviceVerificationEndpoint("/oauth2/v1/device_verification")
-			.tokenEndpoint("/oauth2/v1/token")
-			.tokenIntrospectionEndpoint("/oauth2/v1/introspect")
-			.tokenRevocationEndpoint("/oauth2/v1/revoke")
-			.jwkSetEndpoint("/oauth2/v1/jwks")
-			.oidcLogoutEndpoint("/connect/v1/logout")
-			.oidcUserInfoEndpoint("/connect/v1/userinfo")
-			.oidcClientRegistrationEndpoint("/connect/v1/register")
-			.build();
-	}
+	// @Bean
+	// public AuthorizationServerSettings authorizationServerSettings() {
+	// 	return AuthorizationServerSettings.builder()
+	// 		.issuer("http://localhost:9000")
+	// 		.authorizationEndpoint("/oauth2/authorize")
+	// 		.deviceAuthorizationEndpoint("/oauth2/device_authorization")
+	// 		.deviceVerificationEndpoint("/oauth2/device_verification")
+	// 		.tokenEndpoint("/oauth2/token")
+	// 		.tokenIntrospectionEndpoint("/oauth2/introspect")
+	// 		.tokenRevocationEndpoint("/oauth2/revoke")
+	// 		.jwkSetEndpoint("/oauth2/jwks")
+	// 		.oidcLogoutEndpoint("/connect/logout")
+	// 		.oidcUserInfoEndpoint("/connect/userinfo")
+	// 		.oidcClientRegistrationEndpoint("/connect/register")
+	// 		.build();
+	// }
 
 	// @Bean
 	// public OAuth2TokenGenerator<?> tokenGenerator() {
@@ -233,23 +246,66 @@ public class OAuth2AutServerSecurityConfig {
 
 	// 이는 RegisteredClientRepository 새 클라이언트를 등록하고 기존 클라이언트를 쿼리할 수 있는 중앙 구성 요소입니다.
 	// 클라이언트 인증, 권한 부여 처리, 토큰 검사, 동적 클라이언트 등록 등과 같은 특정 프로토콜 흐름을 따를 때 다른 구성 요소에서 사용됩니다.
-	@Bean
-	public RegisteredClientRepository registeredClientRepository() {
-		RegisteredClient oidcClient = RegisteredClient.withId(UUID.randomUUID().toString())
-			.clientId("oidc-client")
-			.clientSecret("{noop}secret")
-			.clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-			.authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-			.authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-			.redirectUri("http://localhost/authorized")
-			.postLogoutRedirectUri("http://127.0.0.1:8080/")
-			.scope(OidcScopes.OPENID)
-			.scope(OidcScopes.PROFILE)
-			.clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
-			.build();
+	// @Bean
+	// public RegisteredClientRepository registeredClientRepository(JdbcOperations jdbcOperations) {
+	// 	RegisteredClient oidcClient = RegisteredClient.withId(UUID.randomUUID().toString())
+	// 		.clientId("andalos")
+	// 		.clientSecret("{noop}andalos1234")
+	// 		.clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST)
+	// 		.authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+	// 		.authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+	// 		.redirectUri("http://oauth2-login.andalos.com:9010/login/oauth2/code/andalos")
+	// 		.postLogoutRedirectUri("http://oauth2-login.andalos.com:9010")
+	// 		// .scope(OidcScopes.OPENID)
+	// 		// .scope(OidcScopes.PROFILE)
+	// 		.clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
+	// 		.build();
+	//
+	// 	return new InMemoryRegisteredClientRepository(oidcClient);
+	// 	return new JdbcRegisteredClientRepository(jdbcOperations);
+	// }
 
-		return new InMemoryRegisteredClientRepository(oidcClient);
-	}
+
+	// @formatter:off
+	// @Bean
+	// public RegisteredClientRepository registeredClientRepository(JdbcTemplate jdbcTemplate) {
+	// 	RegisteredClient registeredClient = RegisteredClient.withId(UUID.randomUUID().toString())
+	// 		.clientId("andalos")
+	// 		.clientName("안달로스")
+	// 		.clientSecret("{noop}andalos1234")
+	// 		.clientIdIssuedAt(Instant.now())
+	// 		.clientSecretExpiresAt(Instant.now().plus(Duration.ofDays(30)))
+	// 		.clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST)
+	// 		.authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+	// 		.authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+	// 		.authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+	// 		.redirectUri("http://oauth2-login.andalos.com:9010/login/oauth2/code/andalos")
+	// 		.redirectUri("http://oauth2-login.andalos.com:9010")
+	// 		.scope(OidcScopes.OPENID)
+	// 		.scope(OidcScopes.PROFILE)
+	// 		.clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
+	// 		.build();
+	//
+	// 	// Save registered client in db as if in-memory
+	// 	JdbcRegisteredClientRepository registeredClientRepository = new JdbcRegisteredClientRepository(jdbcTemplate);
+	// 	JdbcRegisteredClientRepository.RegisteredClientParametersMapper registeredClientParametersMapper = new JdbcRegisteredClientRepository.RegisteredClientParametersMapper();
+	// 	// PasswordEncoder encoder = new BCryptPasswordEncoder();
+	// 	// registeredClientParametersMapper.setPasswordEncoder(encoder);
+	// 	registeredClientRepository.setRegisteredClientParametersMapper(registeredClientParametersMapper);
+	// 	registeredClientRepository.save(registeredClient);
+	// 	return new JdbcRegisteredClientRepository(jdbcTemplate);
+	// }
+	// // @formatter:on
+	//
+	// @Bean
+	// public OAuth2AuthorizationService authorizationService(JdbcTemplate jdbcTemplate, RegisteredClientRepository registeredClientRepository) {
+	// 	return new JdbcOAuth2AuthorizationService(jdbcTemplate, registeredClientRepository);
+	// }
+	//
+	// @Bean
+	// public OAuth2AuthorizationConsentService authorizationConsentService(JdbcTemplate jdbcTemplate, RegisteredClientRepository registeredClientRepository) {
+	// 	return new JdbcOAuth2AuthorizationConsentService(jdbcTemplate, registeredClientRepository);
+	// }
 
 
 	// 액세스 토큰 서명을 위한 인스턴스입니다 .

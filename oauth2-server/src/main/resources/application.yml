@@ -3,16 +3,53 @@ server:
 
 spring:
   application:
-    name: authorization-server
+    name: oauth2-server
+  messages:
+    encoding: UTF-8
   datasource:
-    driver-class-name: org.h2.Driver
-    url: jdbc:h2:mem:spring-authorization-server-sample
-    username: sa
-    password: 1234
+    andalos:
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      jdbc-url: jdbc:mysql://${DB_URL}
+      username: ${DB_USER_NAME}
+      password: ${DB_USER_PASS}
+      pool-name: master-pool
+      minimum-idle: 3
+      maximum-pool-size: 5
+      idle-timeout: 300000
+      max-lifetime: 600000
+      initialization-mode: always
+      continue-on-error: true
+  jpa:
+    hibernate:
+      ddl-auto: none
+      naming:
+        implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+    database: mysql
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      password: ${REDIS_PASSWORD}
+      port: ${REDIS_PORT}
+  session:
+    timeout: 3600
+    redis:
+      namespace: spring:session:oauth2-server
 
 logging:
   level:
-    root: TRACE
-    org.springframework.web: TRACE
-    org.springframework.security: TRACE
-    org.springframework.security.oauth2: TRACE
+    root: debug
+    org.springframework.web: debug
+    org.springframework.security: debug
+    org.springframework.security.oauth2: debug
+    org:
+      hibernate:
+        type:
+          descriptor:
+            sql:
+              BasicBinder: trace

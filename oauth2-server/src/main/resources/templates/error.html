@@ -4,16 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Spring Authorization Server sample</title>
-    <link rel="stylesheet" href="/webjars/bootstrap/css/bootstrap.css" th:href="@{/webjars/bootstrap/css/bootstrap.css}" />
-    <link rel="stylesheet" href="/assets/css/signin.css" th:href="@{/assets/css/signin.css}" />
+    <link href="/webjars/bootstrap/3.3.7/css/bootstrap.css" rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.css}"/>
+    <script src="/webjars/bootstrap/3.3.7/js/bootstrap.min.js"></script>
 </head>
 <body>
 <div class="container">
-        <div th:if="${param.error}" class="alert alert-danger" role="alert">
-            Invalid username or password.
-        </div>
-        <div th:if="${param.logout}" class="alert alert-success" role="alert">
-            You have been logged out.
+    oauth-server => error.html
+        <div th:if="${param.errorMessage}" class="alert alert-danger" role="alert">
+            [[${param.errorMessage}]]
         </div>
 </div>
 </body>
