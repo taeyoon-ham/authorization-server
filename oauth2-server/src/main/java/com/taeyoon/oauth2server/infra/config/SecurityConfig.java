@@ -68,7 +68,6 @@ import lombok.RequiredArgsConstructor;
 @EnableWebSecurity(debug = true)
 public class SecurityConfig {
 
-	private final CustomFormLoginFailureHandler customFormLoginFailureHandler;
 
 	/**
 	 * 인증서버를 위한 기본 구성
@@ -130,7 +129,7 @@ public class SecurityConfig {
 				.jwt(Customizer.withDefaults())
 			)
 			.headers(headers -> headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::disable))
-			.formLogin(formLogin -> formLogin.failureHandler(customFormLoginFailureHandler));
+			.formLogin(formLogin -> formLogin.failureHandler(new CustomFormLoginFailureHandler()));
 		// @formatter:on
 
 		return http.build();
